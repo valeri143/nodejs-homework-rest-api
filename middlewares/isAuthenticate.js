@@ -7,6 +7,9 @@ const {HttpError} = require("../helpers")
 const isAuthenticate = async (req, res, next) =>{
     const {authorization = ""} = req.headers
     const [bearer, token] = authorization.split(" ")
+    if (!token) {
+        return next(HttpError(401, "Token was missed"))
+    }
     if(bearer !== "Bearer"){
         next(HttpError(401, "Not authorized"))
     }
