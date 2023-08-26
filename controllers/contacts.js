@@ -1,5 +1,4 @@
 const {Contacts} = require("../models")
-// const {contacts} = require('../models/')
 const Joi = require('joi')
 
 const {HttpError, ctrlWrapper} = require('../helpers')
@@ -16,8 +15,17 @@ const addFavoriteSchema = Joi.object({
 })
 
 const listContacts = async (req, res) => {
-      const allContacts = await Contacts.find()
+  const {_id : owner} = req.user
+  const {page = 1, limit = 20, favorite} = req.query 
+  const skip = (page - 1) * limit
+  if(favorite){
+    const allContacts = await Contacts.find({owner, favorite},"", {skip, limit}).populate("owner", "name favorite")
       res.status(200).json(allContacts)
+  }
+  else{
+    const allContacts = await Contacts.find({owner},"", {skip, limit}).populate("owner", "name favorite")
+    res.status(200).json(allContacts)
+  }
   }
 
 const getContactById =async (req, res) => {
@@ -31,11 +39,12 @@ const getContactById =async (req, res) => {
 
 const addContact = async (req, res) => {
     const {body} = req
+    const {_id : owner} = req.user
       const{error} = addSchema.validate(body)
       if(error){
         throw HttpError(400,  "missing required name field")
       }
-      const addedContact = await Contacts.create(body)
+      const addedContact = await Contacts.create({...body, owner})
       res.status(201).json(addedContact)
   }
 
