@@ -2,6 +2,10 @@ const {Users} = require("../models")
 const Joi = require('joi')
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
+const gravatar = require("gravatar")
+const Jimp = require('jimp');
+const path = require("path")
+const fs = require("fs/promises")
 
 const {HttpError, ctrlWrapper} = require('../helpers')
 const {SECRET_KEY} = process.env
@@ -16,6 +20,8 @@ const addSubscriptionSchema = Joi.object({
     subscription: Joi.string()
   })
 
+const avatarsDir = path.join(__dirname, "../", "public", "avatars")
+
 const register = async (req, res) => {
     const{error} = userAddSchema.validate(req.body)
       if(error){
@@ -28,7 +34,9 @@ const register = async (req, res) => {
     }
     const hashedPassword = await bcrypt.hash(password, 10)
 
-const newUser =  await Users.create({...req.body, password: hashedPassword})
+const avatarURL = gravatar.url(email)
+
+const newUser =  await Users.create({...req.body, password: hashedPassword, avatarURL})
 res.status(201).json({
     user: {
         email : newUser.email,
@@ -99,11 +107,32 @@ const updateSubscriptionStatus = async (req, res) =>{
       res.status(200).json({...body, email: updatedSubscriptionStatus.email})
   }
 
+  const updateAvatar = async (req, res) =>{
+    const {_id: id} = req.user
+    const {path : tempDir, originalname} = req.file
+    const fileName = `${id}_${originalname}`
+
+    Jimp.read(tempDir, (err, image) => {
+        if (err) throw err;
+        image
+          .resize(250, 250) 
+      });
+
+    const resultUpload = path.join(avatarsDir, fileName)
+
+    await fs.rename(tempDir, resultUpload)
+
+    const avatarURL = path.join("avatars", fileName)
+    await Users.findByIdAndUpdate(id, {avatarURL})
+
+      res.status(200).json({avatarURL})
+  }
 
 module.exports = {
     register: ctrlWrapper(register),
     login: ctrlWrapper(login),
     logout: ctrlWrapper(logout),
     current: ctrlWrapper(current),
-    updateSubscriptionStatus: ctrlWrapper(updateSubscriptionStatus)
+    updateSubscriptionStatus: ctrlWrapper(updateSubscriptionStatus),
+    updateAvatar: ctrlWrapper(updateAvatar)
 }
