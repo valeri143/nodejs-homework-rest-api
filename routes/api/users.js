@@ -18,4 +18,8 @@ router.patch('/',isAuthenticate, ctrl.updateSubscriptionStatus)
 
 router.patch('/avatars',isAuthenticate, upload.single("avatarURL"), ctrl.updateAvatar)
 
+router.get("/verify/:verificationToken", ctrl.verifyEmail)
+
+router.post("/verify", ctrl.resendVerifyEmail)
+
 module.exports = router

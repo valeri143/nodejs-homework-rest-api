@@ -6,15 +6,21 @@ const gravatar = require("gravatar")
 const Jimp = require('jimp');
 const path = require("path")
 const fs = require("fs/promises")
+const {nanoid} = require("nanoid")
 
 const {HttpError, ctrlWrapper} = require('../helpers')
-const {SECRET_KEY} = process.env
+const sendNodemailer = require("../services")
+const {SECRET_KEY, BASE_URL} = process.env
 
 const userAddSchema = Joi.object({
     password: Joi.string().required(),
     email: Joi.string().required(),
     subscription: Joi.string()
    })
+
+const verifyEmailSchema = Joi.object({
+  email: Joi.string().required()
+})
 
 const addSubscriptionSchema = Joi.object({
     subscription: Joi.string()
@@ -35,8 +41,15 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10)
 
 const avatarURL = gravatar.url(email)
+const verificationToken = nanoid()
 
-const newUser =  await Users.create({...req.body, password: hashedPassword, avatarURL})
+const newUser =  await Users.create({...req.body, password: hashedPassword, avatarURL, verificationToken})
+const verifyEmail = {
+  to:email,
+  subject: 'Verification letter',
+  html: `<h1>Hello ${email}</h1><p>Please verify your email by clicking the link below</p><a href="${BASE_URL}/api/users/verify/${verificationToken}">Verify</a>`
+}
+await sendNodemailer(verifyEmail)
 res.status(201).json({
     user: {
         email : newUser.email,
@@ -56,6 +69,9 @@ const login = async (req, res) => {
     if(!user){
         throw HttpError(401, "Email or password is wrong")
     }
+    if(!user.verify){
+      throw HttpError(401, "Email is not verified")
+    }
 
     const comparedPassword = bcrypt.compare(password, user.password)
     if(!comparedPassword){
@@ -72,6 +88,42 @@ const login = async (req, res) => {
             subscription: user.subscription || "starter"
         }
     })
+}
+
+const verifyEmail = async (req, res) => {
+  const {verificationToken} = req.params
+
+  const user = await Users.findOne({verificationToken});
+  if(!user){
+    throw HttpError(404)
+  }
+  await Users.findByIdAndUpdate(user._id, {verify: true, verificationToken: null})
+
+  res.status(200).json({ message: 'Verification successful',})
+}
+
+const resendVerifyEmail = async (req, res) => {
+  const {email} = req.body
+  const{error} = verifyEmailSchema.validate(req.body)
+  if(error){
+    throw HttpError(400, "missing required field email")
+  }
+
+  const user = await Users.findOne({email})
+  if(!user){
+    throw HttpError(404)
+  }
+  if(user.verify){
+    throw HttpError(400, "Verification has already been passed")
+  }
+  const verifyEmail = {
+    to:email,
+    subject: 'Verification letter',
+    html: `<h1>Hello ${email}</h1><p>Please verify your email by clicking the link below</p><a href="${BASE_URL}/api/users/verify/${user.verificationToken}">Verify</a>`
+  }
+  await sendNodemailer(verifyEmail)
+
+  res.status(200).json({ message: 'Verification email resent',})
 }
 
 const logout = async (req, res) => {
@@ -134,5 +186,7 @@ module.exports = {
     logout: ctrlWrapper(logout),
     current: ctrlWrapper(current),
     updateSubscriptionStatus: ctrlWrapper(updateSubscriptionStatus),
-    updateAvatar: ctrlWrapper(updateAvatar)
+    updateAvatar: ctrlWrapper(updateAvatar),
+    verifyEmail: ctrlWrapper(verifyEmail),
+    resendVerifyEmail: ctrlWrapper(resendVerifyEmail)
 }
