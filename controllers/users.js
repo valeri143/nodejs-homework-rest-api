@@ -8,7 +8,8 @@ const path = require("path")
 const fs = require("fs/promises")
 const {nanoid} = require("nanoid")
 
-const {HttpError, ctrlWrapper, sendNodemailer} = require('../helpers')
+const {HttpError, ctrlWrapper} = require('../helpers')
+const sendNodemailer = require("../services")
 const {SECRET_KEY, BASE_URL} = process.env
 
 const userAddSchema = Joi.object({
